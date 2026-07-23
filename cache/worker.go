@@ -1,22 +1,35 @@
 package cache
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
-func (c *Cache) cleanup(interval time.Duration) {
+func (c *Cache) cleanup(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+        return 
+    }
+	
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		now := time.Now().UnixNano()
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now().UnixNano()
 
-		c.mu.Lock()
+			c.mu.Lock()
 
-		for k, v := range c.data {
-			if now > v.ExpiresAt {
-				delete(c.data, k)
+			for k, v := range c.data {
+				if now > v.ExpiresAt {
+					delete(c.data, k)
+				}
 			}
-		}
 
-		c.mu.Unlock()
+			c.mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
 	}
+
 }

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"testing"
@@ -8,7 +9,10 @@ import (
 )
 
 func TestCache_SetGetDelete(t *testing.T) {
-	c := New(1*time.Minute, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := New(ctx, 1*time.Minute, 10)
 	c.Set("k1", "v1", 1*time.Minute)
 
 	val, ok := c.Get("k1")
@@ -27,7 +31,10 @@ func TestCache_SetGetDelete(t *testing.T) {
 }
 
 func TestCache_Expiration(t *testing.T) {
-	c := New(1*time.Minute, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := New(ctx, 1*time.Minute, 10)
 
 	c.Set("k1", "v1", 50*time.Millisecond)
 
@@ -40,7 +47,10 @@ func TestCache_Expiration(t *testing.T) {
 }
 
 func TestCache_MaxSize(t *testing.T) {
-	c := New(1*time.Minute, 3)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := New(ctx, 1*time.Minute, 3)
 
 	c.Set("k1", "v1", 1*time.Minute)
 	c.Set("k2", "v2", 1*time.Minute)
@@ -55,7 +65,10 @@ func TestCache_MaxSize(t *testing.T) {
 }
 
 func TestCache_BackgroundCleanup(t *testing.T) {
-	c := New(100*time.Millisecond, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := New(ctx, 100*time.Millisecond, 10)
 
 	c.Set("k1", "v1", 50*time.Millisecond)
 
@@ -69,7 +82,10 @@ func TestCache_BackgroundCleanup(t *testing.T) {
 }
 
 func TestCache_ConcurrentAccess(t *testing.T) {
-	c := New(1*time.Minute, 1000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
+	c := New(ctx, 1*time.Minute, 1000)
 	var wg sync.WaitGroup
 
 	for i := 0; i < 100; i++ {
@@ -86,4 +102,22 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestCache_CancelContext(t *testing.T) {
+    ctx, cancel := context.WithCancel(context.Background())
+    
+    c := New(ctx, 10*time.Millisecond, 1000)
+    
+    c.Set("k1", "v1", 20*time.Millisecond)
+
+    cancel()
+
+    time.Sleep(50 * time.Millisecond)
+
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    if len(c.data) != 1 {
+        t.Errorf("Ожидали, что мапа останется с 1 элементом, но там %d элементов", len(c.data))
+    }
 }

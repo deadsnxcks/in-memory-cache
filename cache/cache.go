@@ -1,10 +1,14 @@
 package cache
 
 import (
+	"context"
 	"math"
 	"sync"
 	"time"
 )
+
+const DefaultExpiration time.Duration = 0
+const NoExpiration time.Duration = -1
 
 type Cache struct {
 	mu      sync.RWMutex
@@ -17,13 +21,19 @@ type Item struct {
 	ExpiresAt int64
 }
 
-func New(cleanupInterval time.Duration, maxSize int) *Cache {
+func New(ctx context.Context, cleanupInterval time.Duration, maxSize int) *Cache {
+	if maxSize < 0 {
+		maxSize = 0
+	}
+
 	c := &Cache{
 		data:    make(map[string]Item, maxSize),
 		maxSize: maxSize,
 	}
 
-	go c.cleanup(cleanupInterval)
+	if cleanupInterval > 0 {
+		go c.cleanup(ctx, cleanupInterval)
+	}
 
 	return c
 }
@@ -36,6 +46,14 @@ func (c *Cache) Set(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	var expiresAt int64
+
+	if ttl > 0 {
+		expiresAt = time.Now().Add(ttl).UnixNano()
+	} else {
+		expiresAt = math.MaxInt64
+	}
+
 	if c.maxSize > 0 && len(c.data) >= c.maxSize {
 		if _, exists := c.data[key]; !exists {
 			c.freeSpace()
@@ -44,7 +62,7 @@ func (c *Cache) Set(
 
 	c.data[key] = Item{
 		Value:     value,
-		ExpiresAt: time.Now().Add(ttl).UnixNano(),
+		ExpiresAt: expiresAt,
 	}
 }
 
